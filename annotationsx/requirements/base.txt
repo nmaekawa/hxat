@@ -1,4 +1,6 @@
 certifi==2019.3.9
+channels
+channels_redis
 chardet==3.0.4
 Django==2.2.4
 django-bootstrap3==11.0.0
@@ -12,6 +14,7 @@ lti==0.9.3
 lxml==4.3.3
 psycopg2-binary==2.8.2
 PyJWT==1.7.1
+python_dotenv
 python-dateutil==2.8.0
 pytz==2018.9
 requests==2.21.0
