@@ -1,4 +1,4 @@
-// [AIV_SHORT]  Version: 0.0.1 - Monday, September 16th, 2019, 11:20:14 AM  
+// [AIV_SHORT]  Version: 0.0.1 - Monday, September 16th, 2019, 1:18:05 PM  
  /******/ (function(modules) { // webpackBootstrap
 /******/ 	// The module cache
 /******/ 	var installedModules = {};
@@ -33399,6 +33399,22 @@ __webpack_require__(9);
     if (annotation.media !== "comment" && annotation.media !== "Annotation" && annotation.text !== "" && $.exists(annotation.tags)) {
       var ann = annotation;
       ann.index = jQuery('.ann-item').length;
+      var filteroptions = jQuery('.btn.user-filter.active').toArray().map(function (button) {
+        return button.id;
+      });
+
+      if (self.options.instructors.find(function (id) {
+        return id === ann.creator.id;
+      }) && filteroptions.indexOf('instructor') === -1) {
+        $.publishEvent('increaseBadgeCount', self.instance_id, [jQuery('#instructor')]);
+        return;
+      }
+
+      if (ann.id !== self.options.user_id && filteroptions.indexOf('peer') === -1) {
+        $.publishEvent('increaseBadgeCount', self.instance_id, [jQuery('#peer')]);
+        return;
+      }
+
       ann.instructor_ids = self.options.instructors;
       ann.common_name = self.options.common_instructor_name && self.options.common_instructor_name !== "" ? self.options.common_instructor_name : ann.creator.name;
       var annHTML = self.options.TEMPLATES.annotationItem(ann);
