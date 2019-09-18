@@ -94,7 +94,7 @@ class AnnotationStore(object):
         return cls
 
     def root(self, annotation_id=None):
-        return self.backend.root(annotation_id, self.request.LTI.get('is_graded', False))
+        return self.backend.root(annotation_id)
 
     def index(self):
         raise NotImplementedError
@@ -587,12 +587,13 @@ class WebAnnotationStoreBackend(StoreBackend):
         }
         self.timeout = 5.0 # most actions should complete within this amount of time, other than search perhaps
 
-    def root(self, annotation_id, is_graded):
+    def root(self, annotation_id):
         self.logger.info(u"MethodType: %s" % self.request.method)
         self.channel_layer = channels.layers.get_channel_layer()
         if self.request.method == "GET":
             self.before_search()
             response = self.search()
+            is_graded = self.request.LTI.get('lis_outcome_service_url', False)
             self.logger.info("Assignment should be graded: %s" % is_graded)
             if is_graded and self.after_search(response):
                 self.lti_grade_passback(score=1)
