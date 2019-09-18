@@ -594,6 +594,7 @@ class WebAnnotationStoreBackend(StoreBackend):
             self.before_search()
             response = self.search()
             is_graded = self.request.LTI.get('is_graded', False)
+            self.logger.info("Assignment should be graded: %s" % is_graded)
             if is_graded and self.after_search(response):
                 self.lti_grade_passback(score=1)
             return response
