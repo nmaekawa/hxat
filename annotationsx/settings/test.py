@@ -23,3 +23,9 @@ LTI_SECRET_DICT = {
         TEST_COURSE: TEST_COURSE_LTI_SECRET,
         }
 
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    }
+}
