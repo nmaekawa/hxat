@@ -19,69 +19,111 @@ import urllib
 
 logger = logging.getLogger(__name__)
 
-ORGANIZATION = getattr(settings, 'ORGANIZATION', None)
-
-ANNOTATION_STORE_API_NAMES
-
-BACKEND_CFG = {
-        'default': {
-            'url': 'http://catchpy.vm',
-            'consumer_key': 'key1',
-            'consumer_secret': 'secret1',
-            'annotation_format': 'webannotation',
-            'api_type': 'rest',
-            'backend_class': 'WebannotationBackendStore',
-            },
-        'jack': {
-            'url': 'http://catchpy.vm',
-            'consumer_key': 'key2',
-            'consumer_secret': 'secret2',
-            'annotation_format': 'webannotation',
-            'api_type': 'rest',
-            'backend_class': 'WebannotationBackendStore',
-            },
-        'jill': {
-            'url': 'http://catchpy.vm',
-            'consumer_key': 'key3',
-            'consumer_secret': 'secret3',
-            'annotation_format': 'annotatorjs',
-            'api_type': 'rest',
-            'backend_class': 'AnnotatorjsBackendStore',
-            },
-        }
+# attr names for annotation-store cfg in Assignment object
+STORECFG_ATTRS = ['annotation_database_url', 'annotation_database_apikey',
+        'annotation_database_secret_token']
 
 class AnnotationStore(object):
     '''
     '''
+    logger = logging.getLogger(__name__)
 
-    def __init__(self, backend_cfg=BACKEND_CFG):
-        self.backend_cfg = backend_cfg
-        self.logger = logging.getLogger('{module}.{cls}'.format(module=__name__, cls=self.__class__.__name__))
+
+    # from hx_lti_initializer/utils.py
+    @classmethod
+    def get_store_cfg(cls, collection_id=None, context_id=None):
+        if collection_id:
+            try:
+                cfg = Assignment.objects.get(
+                        assignment_id=collection_id).values(*STORECFG_ATTRS)
+                store_cfg = [cfg]
+            except Assignment.DoesNotExist as e:
+                cls.logger.error('assignment({}) not found'.format(collection_id))
+                return []
+
+        elif context_id:
+            try:
+                store_cfg = Assignment.objects \
+                        .filter(course__course_id=context_id) \
+                        .values(*STORECFG_ATTRS) \
+                        .distinct(*STORECFG_ATTRS) \
+                        .order_by(*STORECFG_ATTRS)
+            except DatabaseError as e:
+                cls.logger.error('assignment not found for context({}): {}' \
+                        .format(collection_id, e))
+                return []
+
+        else:
+            cls.logger.info('request for all distinct assignments possible!')
+            try:
+                store_cfg = Assignment.objects \
+                        .values(*STORECFG_ATTRS) \
+                        .distinct(*STORECFG_ATTRS) \
+                        .order_by(*STORECFG_ATTRS)
+            except DatabaseError as e:
+                cls.logger.error('no assignments found in database!')
+                return []
+
+        # The list of database entries might not be unique (despite the *select distinct*) if any of
+        # the URLs contain whitespace. The code below accounts for that possibility.
+        k, cfg_by_url = ('annotation_database_url', {})
+        for row in store_cfg:
+            row[k] = row[k].strip()
+            if row[k] and row[k] not in cfg_by_url:
+                cfg_by_url[row[k]] = row
+            else:
+                cls.logger.debug(
+                        ('CURSES CURSES CURSES CURSES! annotation_database_url'
+                          ' with trailing spaces!!! ({})').format(row[k]))
+
+        return cfg_by_url.values()
 
 
     @classmethod
-    def get_assignment_list(cls, request):
-        '''get assignment related to this request.
+    def get_store_cfg_from_request(cls, request):
+        '''get annotation_store configs related to this request.
 
-        returns a list of Assignment objects; list might be empty.
+        'create' always get collection_id from the body of request;
+        other requests follow this order:
+            1. collection_id param in querystring
+                 if collection_id present but can't find object, then error
+            2. resource_link_id param in querystring
+                 if resource_link_id present but can't find object, then error
+            3. context_id param in querystring
+                if context_id present but can't find object, then error
+                here a search will be across assignments in a course
+            4. no param found results in search for all possible store configs
+               across the whole database!
+
+        returns a list of dicts; list might be empty.
+        [
+            {
+                'annotation_database_url': 'http://store1.com/catch/annotator',
+                'annotation_database_apikey': 'key1',
+                'annotation_database_secret_token': 'secret1',
+            },
+            {
+                'annotation_database_url': 'http://store2.com/catch/annotator',
+                'annotation_database_apikey': 'key2',
+                'annotation_database_secret_token': 'secret2',
+            },
+        ]
         '''
 
         if request.method == 'POST':
-            # get context_id and collection_id from json body
+            # get collection_id from json body
             # note that PUT for update is not reliable since the context_id
             # might be the thing that changed!
             body = json.loads(str(self.request.body, 'utf-8'))
             # try to read as if it's Webannotation
             try:
-                assignment_id = body['platform']['collection_id']
+                collection_id = body['platform']['collection_id']
             except KeyError as e:
                 # try to read as if it's Annotatorjs
-                assignment_id = body.get('collectionId', None)
-            if assignment_id:
-                assignment = Assignment.objects.get(assignment_id=assignment_id)
-                return [assignment]
-            else:
-                return []
+                collection_id = body.get('collectionId', None)
+            if collection_id:
+                store_cfg = cls.get_store_cfg(collection_id=collection_id)
+                return store_cfg
 
         else:  # other than create(POST), check querystring
             try:
@@ -92,13 +134,8 @@ class AnnotationStore(object):
             # check querystring for context/collection
             collection_id = qs.get('collection_id', qs.get('collectionId', None))
             if collection_id:
-                try:
-                    assignment = Assignment.objects.get(assignment_id=collection_id)
-                except Assignment.DoesNotExist as e:
-                    self.logger.info('assignment_id({}) not found from querystring'.format(resource_link_id))
-                    assignment = None
-                else:
-                    return [assignment]
+                store_cfg = cls.get_store_cfg(collection_id=collection_id)
+                return store_cfg
 
             resource_link_id = qs.get('resource_link_id', None)
             if resource_link_id:
@@ -107,45 +144,31 @@ class AnnotationStore(object):
                 except LTIResourceLinkConfig.DoesNotExist as e:
                     self.logger.info('resource_link_id({}) not found from querystring'.format(resource_link_id))
                     resource_link_id = None
-                try:
-                    assignment = Assignment.objects.get(assignment_id=rli.collection_id)
-                except Assignment.DoesNoteExist as e:
-                    self.logger.info(
-                            'assignment_id({}) not found from resource_link_id({}) in querystring'.format(
-                                rli.collection_id, resource_link_id)
-                    )
-                    assignment = None
                 else:
-                    return [assignment]
+                    store_cfg = cls.get_store_cfg(collection_id=rli.collection_id)
+                    return store_cfg
 
             context_id = qs.get('context_id', qs.get('contextId', None))
             if context_id:
-                try:
-                    context = LTICourse.objects.get(course_id=context_id)
-                except LTICourse.DoesNotExist as e:
-                    self.logger.info('context_id({}) not found from querystring'.format(context_id))
-                    context_id = None
-                else:
-                    # not sure this is actually just a list of assignment objects
-                    return context.assignments
+                store_cfg = cls.get_store_cfg(context_id=context_id)
+                return store_cfg
 
             # run out of places to find annotation backend cfg!
             # look for some other requirement that allow operation to be
-            # done across many backend stores, e.g. if instructor then ok
-            # to search over courses for a user_id to, say, check
-            # participation.
+            # done across all backend stores, e.g. if instructor then ok
+            # to search over all courses for a user_id to, say, check
+            # participation history.
 
-            # at some point, give up. But how to flag an error? should
-            # error be flagged here?
+            # at some point, give up.
             self.logger.info('unable to find annotation store for qs({})'.format(qs))
             return []
 
 
     @classmethod
     def search(cls, request):
-        assignments = cls.get_assignment_list(request)
+        cfg = cls.get_store_cfg_from_request(request)
 
-        if assignments:
+        if cfg:
             # select distinct(backend_store_cfg)
 
             # for each backend_store_cfg, issue a search request
@@ -164,32 +187,37 @@ class AnnotationStore(object):
 
     @classmethod
     def create(cls, request):
-        assignments = cls.get_assignment_list(request)
-        if len(assignments) != 1:
+        cfg = cls.get_store_cfg_from_request(request)
+        if len(cfg) != 1:
             # error? insufficient params in request
             return None
 
         # issue request to create
 
-        # 
 
 
     @classmethod
     def update(cls, request):
-        assignments = cls.get_assignment_list(request)
-        pass
+        cfg = cls.get_store_cfg_from_request(request)
+        if len(cfg) != 1:
+            # error? insufficient params in request
+            return None
 
 
     @classmethod
     def delete(cls, request):
-        assignments = cls.get_assignment_list(request)
-        pass
+        cfg = cls.get_store_cfg_from_request(request)
+        if len(cfg) != 1:
+            # error? insufficient params in request
+            return None
 
 
     @classmethod
     def read(cls, request):
-        assignments = cls.get_assignment_list(request)
-        pass
+        cfg = cls.get_store_cfg_from_request(request)
+        if len(cfg) != 1:
+            # error? insufficient params in request
+            return None
 
 
     @classmethod
@@ -206,7 +234,7 @@ class AnnotationStore(object):
 class StoreBackend(object):
     BACKEND_NAME = None
     ADMIN_GROUP_ID = '__admin__'
-    ADMIN_GROUP_ENABLED = True if ORGANIZATION == 'ATG' else False
+    ADMIN_GROUP_ENABLED = True if settings.ORGANIZATION == 'ATG' else False
 
     def __init__(self, request):
         self.request = request
