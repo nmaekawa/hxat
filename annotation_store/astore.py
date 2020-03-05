@@ -43,10 +43,9 @@ class AnnotationStore(object):
 
         elif context_id:
             try:
-                store_cfg = Assignment.objects \
+                store_cfg = Assignment.objects                \
                         .filter(course__course_id=context_id) \
-                        .values(*STORECFG_ATTRS) \
-                        .distinct(*STORECFG_ATTRS) \
+                        .values(*STORECFG_ATTRS)              \
                         .order_by(*STORECFG_ATTRS)
             except DatabaseError as e:
                 cls.logger.error('assignment not found for context({}): {}' \
@@ -56,9 +55,8 @@ class AnnotationStore(object):
         else:
             cls.logger.info('request for all distinct assignments possible!')
             try:
-                store_cfg = Assignment.objects \
+                store_cfg = Assignment.objects   \
                         .values(*STORECFG_ATTRS) \
-                        .distinct(*STORECFG_ATTRS) \
                         .order_by(*STORECFG_ATTRS)
             except DatabaseError as e:
                 cls.logger.error('no assignments found in database!')
@@ -76,7 +74,7 @@ class AnnotationStore(object):
                         ('CURSES CURSES CURSES CURSES! annotation_database_url'
                           ' with trailing spaces!!! ({})').format(row[k]))
 
-        return cfg_by_url.values()
+        return list(cfg_by_url.values())
 
 
     @classmethod
