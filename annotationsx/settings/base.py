@@ -64,6 +64,7 @@ INSTALLED_APPS = (
     'annotation_store',
     'hx_lti_assignment',
     'target_object_database',
+    'csp_report',
 )
 
 MIDDLEWARE = (
@@ -73,9 +74,10 @@ MIDDLEWARE = (
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    'annotationsx.middleware.ContentSecurityPolicyMiddleware',
+    #'annotationsx.middleware.ContentSecurityPolicyMiddleware',
     'annotationsx.middleware.MultiLTILaunchMiddleware',
     #'annotationsx.middleware.SessionMiddleware',
+    'csp.middleware.CSPMiddleware',
     'annotationsx.middleware.ExceptionLoggingMiddleware',
 )
 
@@ -240,6 +242,16 @@ LOGGING = {
             'handlers': ['default', 'console'],
             'propagate': False,
         },
+        'csp.middleware': {
+            'level': _DEFAULT_LOG_LEVEL,
+            'handlers': ['default', 'console'],
+            'propagate': False,
+        },
+        'csp_report': {
+            'level': _DEFAULT_LOG_LEVEL,
+            'handlers': ['default'],  # no reports on console(syslog)
+            'propagate': False,
+        },
     },
 }
 
@@ -250,7 +262,20 @@ LTI_ROLES = "roles"
 LTI_DEBUG = os.environ.get('DEBUG', SECURE_SETTINGS.get('debug', False))
 ADMIN_ROLES = literal_eval(os.environ.get('ADMIN_ROLES', str(SECURE_SETTINGS.get('ADMIN_ROLES', {'Administrator'}))))
 LTI_UNIQUE_RESOURCE_ID = 'resource_link_id'
-CONTENT_SECURITY_POLICY_DOMAIN = os.environ.get('CONTENT_SECURITY_POLICY_DOMAIN', SECURE_SETTINGS.get('content_security_policy_domain', None))
+
+#CONTENT_SECURITY_POLICY_DOMAIN = os.environ.get('CONTENT_SECURITY_POLICY_DOMAIN', SECURE_SETTINGS.get('content_security_policy_domain', None))
+# django-csp configs
+# generates reports without blocking resources, default is TRUE
+CSP_REPORT_ONLY = os.environ.get('CSP_REPORT_ONLY', 'true').lower() == 'true'
+CSP_REPORT_URI = [os.environ.get('CSP_REPORT_URI', 'http://localhost:8000/csp/report')]
+CSP_DEFAULT_SRC = ["'self'"]
+CSP_FONT_SRC = ["'self'", 'data:']
+CSP_FRAME_ANCESTORS = ["'self'"]
+CSP_IMG_SRC = ["'self'", 'data:']
+#CSP_SCRIPT_SRC = ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
+CSP_SCRIPT_SRC = ["'self'"]
+#CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]
+CSP_STYLE_SRC = ["'self'"]
 
 SERVER_NAME = os.environ.get('SERVER_NAME', SECURE_SETTINGS.get('SERVER_NAME', ''))
 ORGANIZATION = os.environ.get('ORGANIZATION', SECURE_SETTINGS.get('ORGANIZATION', ''))
